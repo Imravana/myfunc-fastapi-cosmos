@@ -36,7 +36,7 @@ jobs:
 
       - name: Zip deployment package
         run: |
-          zip -r release.zip . -x "*.git*" "*.github*" ".venv/*"
+          zip -r release.zip HttpTriggerFunction host.json main.py cosmos_client.py requirements.txt -x "*.git*" "*.github*" ".venv/*"
 
       - name: Upload deployment package
         uses: actions/upload-artifact@v4
