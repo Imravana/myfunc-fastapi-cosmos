@@ -1,0 +1,6 @@
+azure-functions
+fastapi
+uvicorn               # used for local FastAPI testing if needed
+azure-cosmos>=4.0.0
+python-dotenv         # optional: load env vars locally
+pydantic[email]      # for email validation in Pydantic models
