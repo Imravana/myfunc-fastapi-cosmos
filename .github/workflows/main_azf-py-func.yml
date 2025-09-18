@@ -1,4 +1,5 @@
-name: Build and Deploy FastAPI to Azure Functions
+# .github/workflows/deploy-python-azure-functions.yml
+name: Build and deploy Python project to Azure Function App - azf-py-func
 
 on:
   push:
@@ -7,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'    # project root that contains host.json
   PYTHON_VERSION: '3.12'
 
 jobs:
@@ -15,33 +16,42 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create virtual environment
+      - name: Create venv and install deps
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Install dependencies
+      # Optional: run tests here
+
+      # IMPORTANT: zip the project root so the archive root contains:
+      #   host.json, requirements.txt, HttpTriggerFunction/, main.py, etc.
+      - name: Create deployment package
         run: |
-          pip install -r requirements.txt
+          set -e
+          zip -r release.zip . \
+            -x "venv/*" \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x ".vscode/*" \
+            -x "__pycache__/*" \
+            -x "*.pyc" \
+            -x ".pytest_cache/*"
 
-      - name: Zip deployment package
-        run: |
-          zip -r release.zip HttpTriggerFunction host.json main.py cosmos_client.py requirements.txt -x "*.git*" "*.github*" ".venv/*"
-
-      - name: Upload deployment package
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-app
+          name: function-package
           path: release.zip
 
   deploy:
@@ -50,28 +60,24 @@ jobs:
     permissions:
       id-token: write
       contents: read
-
     steps:
-      - name: Download deployment package
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: python-app
+          name: function-package
 
-      - name: Unzip deployment package
-        run: |
-          unzip release.zip
-          rm release.zip
-
-      - name: Azure Login
+      - name: Login to Azure
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_105FEC104AAA44F7AE871052FBC981B5 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_78A9D211BB9241C9B37A63BE7B448F92 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_1ECAEEF5F1CC4AC18A2B49D26FF64770 }}
 
-      - name: Deploy to Azure Functions
+
+      - name: Deploy package to Azure Functions
         uses: Azure/functions-action@v1
+        id: deploy-to-function
         with:
           app-name: 'azf-py-func'
           slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+          package: 'release.zip'
